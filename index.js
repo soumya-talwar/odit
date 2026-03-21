@@ -37,7 +37,10 @@ app.post("/log", async (req, res) => {
 			const taunt = await generateTaunt(expense);
 			console.log("Generated taunt:", taunt);
 			await sendEmail(input, taunt);
-			res.json({ message: `Logged ${expense.amount} for ${expense.category}` });
+			res.json({
+				message: `Logged ${expense.amount} for ${expense.category}`,
+				taunt: taunt,
+			});
 		} else {
 			res.status(400).json({ error: "Could not parse amount from input" });
 		}
