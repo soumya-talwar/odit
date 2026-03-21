@@ -3,6 +3,7 @@ import { google } from "googleapis";
 import fs from "fs";
 import express from "express";
 import { GoogleGenAI } from "@google/genai";
+import { Resend } from "resend";
 
 const ai = new GoogleGenAI({
 	apiKey: process.env.GEMINI_API_KEY,
@@ -19,6 +20,8 @@ const auth = new google.auth.GoogleAuth({
 
 const sheets = google.sheets({ version: "v4", auth });
 
+const resend = new Resend(process.env.RESEND_API_KEY);
+
 const app = express();
 app.use(express.json());
 
@@ -31,9 +34,10 @@ app.post("/log", async (req, res) => {
 			expense.category = categorizeExpense(expense.description);
 			console.log("Parsed expense:", expense);
 			await appendSheet(expense);
-			res.json({ message: `Logged ${expense.amount} for ${expense.category}` });
 			const taunt = await generateTaunt(expense);
 			console.log("Generated taunt:", taunt);
+			await sendEmail(input, taunt);
+			res.json({ message: `Logged ${expense.amount} for ${expense.category}` });
 		} else {
 			res.status(400).json({ error: "Could not parse amount from input" });
 		}
@@ -83,14 +87,39 @@ async function appendSheet({ amount, category, description }) {
 
 async function generateTaunt({ amount, category, description }) {
 	const prompt = `
-    You are a sarcastic financial advisor.
+    You are a sharp, sarcastic financial advisor.
+    Write a SHORT (1-2 sentences max) passive-aggressive remark about the user's spending.
+
+    Be:
+    - cutting, slightly mean, and personal
+    - specific to the expense
+    - NOT poetic or flowery
+    - NOT overly verbose
+
     User spent ₹${amount} on ${category}.
-    The description of the expense is: "${description}".
-    Insult them in a witty, passive aggressive way.
-  `;
+    Description: "${description}"
+
+    Respond with only the remark. No explanations.
+    `;
 	const response = await ai.models.generateContent({
 		model: "gemini-2.5-flash",
 		contents: [{ role: "user", parts: [{ text: prompt }] }],
 	});
 	return response.text;
+}
+
+async function sendEmail(input, taunt) {
+	try {
+		await resend.emails.send({
+			from: "onboarding@resend.dev",
+			to: process.env.EMAIL_USER,
+			subject: "[ODIT] Regarding your expense",
+			html: `
+        <p><i>"${input}"</i></p>
+        <p>${taunt}</p>
+      `,
+		});
+	} catch (err) {
+		console.error("Email failed:", err);
+	}
 }
