@@ -21,6 +21,8 @@ app.post("/log", async (req, res) => {
 	try {
 		const input = req.body.text;
 		console.log("Received from Siri:", input);
+		const expense = parseExpense(input);
+		console.log("Parsed expense:", expense);
 		res.json({ message: "Received successfully" });
 	} catch (err) {
 		console.error(err);
@@ -32,16 +34,26 @@ app.listen(3000, () => {
 	console.log("Server running on port 3000");
 });
 
-// async function testWrite(amount, category, description) {
-// 	const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-// 	await sheets.spreadsheets.values.append({
-// 		spreadsheetId,
-// 		range: "Sheet1!A:D",
-// 		valueInputOption: "USER_ENTERED",
-// 		requestBody: {
-// 			values: [[new Date().toISOString(), amount, category, description]],
-// 		},
-// 	});
+function parseExpense(text) {
+  const match = text.match(/\d+/);
+  const amount = match ? Number(match[0]) : 0;
+  const description = text.replace(/^.*?\d+\s*/, "").trim();
+  return {
+    amount,
+    description,
+  };
+}
 
-// 	console.log("✅ Successfully wrote to Google Sheet");
+// async function testWrite(amount, category, description) {
+//  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+//  await sheets.spreadsheets.values.append({
+//    spreadsheetId,
+//    range: "Sheet1!A:D",
+//    valueInputOption: "USER_ENTERED",
+//    requestBody: {
+//      values: [[new Date().toISOString(), amount, category, description]],
+//    },
+//  });
+
+//  console.log("✅ Successfully wrote to Google Sheet");
 // }
