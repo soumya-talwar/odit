@@ -1,7 +1,12 @@
 import "dotenv/config";
 import { google } from "googleapis";
-import express from "express";
 import fs from "fs";
+import express from "express";
+import { GoogleGenAI } from "@google/genai";
+
+const ai = new GoogleGenAI({
+	apiKey: process.env.GEMINI_API_KEY,
+});
 
 const serviceAccount = JSON.parse(
 	fs.readFileSync("./service-account.json", "utf-8"),
@@ -27,6 +32,8 @@ app.post("/log", async (req, res) => {
 			console.log("Parsed expense:", expense);
 			await appendSheet(expense);
 			res.json({ message: `Logged ${expense.amount} for ${expense.category}` });
+			const taunt = await generateTaunt(expense);
+			console.log("Generated taunt:", taunt);
 		} else {
 			res.status(400).json({ error: "Could not parse amount from input" });
 		}
@@ -56,6 +63,7 @@ function parseExpense(text) {
 function categorizeExpense(text) {
 	if (text.includes("uber") || text.includes("ola")) return "Transport";
 	if (text.includes("swiggy") || text.includes("zomato")) return "Food";
+	if (text.includes("dance") || text.includes("jive")) return "Hobbies";
 	if (text.includes("amazon")) return "Shopping";
 	return "Misc";
 }
@@ -71,4 +79,18 @@ async function appendSheet({ amount, category, description }) {
 		},
 	});
 	console.log("✅ Successfully wrote to Google Sheet");
+}
+
+async function generateTaunt({ amount, category, description }) {
+	const prompt = `
+    You are a sarcastic financial advisor.
+    User spent ₹${amount} on ${category}.
+    The description of the expense is: "${description}".
+    Insult them in a witty, passive aggressive way.
+  `;
+	const response = await ai.models.generateContent({
+		model: "gemini-2.5-flash",
+		contents: [{ role: "user", parts: [{ text: prompt }] }],
+	});
+	return response.text;
 }
