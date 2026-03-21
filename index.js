@@ -23,6 +23,8 @@ app.post("/log", async (req, res) => {
 		console.log("Received from Siri:", input);
 		const expense = parseExpense(input);
 		console.log("Parsed expense:", expense);
+		const category = categorizeExpense(expense.description);
+		console.log("Calculated category:", category);
 		res.json({ message: "Received successfully" });
 	} catch (err) {
 		console.error(err);
@@ -35,13 +37,23 @@ app.listen(3000, () => {
 });
 
 function parseExpense(text) {
-  const match = text.match(/\d+/);
-  const amount = match ? Number(match[0]) : 0;
-  const description = text.replace(/^.*?\d+\s*/, "").trim();
-  return {
-    amount,
-    description,
-  };
+	const match = text.match(/\d+/);
+	const amount = match ? Number(match[0]) : 0;
+	const description = text
+		.replace(/^.*?\d+\s*/, "")
+		.trim()
+		.toLowerCase();
+	return {
+		amount,
+		description,
+	};
+}
+
+function categorizeExpense(text) {
+	if (text.includes("uber") || text.includes("ola")) return "Transport";
+	if (text.includes("swiggy") || text.includes("zomato")) return "Food";
+	if (text.includes("amazon")) return "Shopping";
+	return "Misc";
 }
 
 // async function testWrite(amount, category, description) {
