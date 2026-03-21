@@ -21,11 +21,15 @@ app.post("/log", async (req, res) => {
 	try {
 		const input = req.body.text;
 		console.log("Received from Siri:", input);
-		const expense = parseExpense(input);
-		console.log("Parsed expense:", expense);
-		const category = categorizeExpense(expense.description);
-		console.log("Calculated category:", category);
-		res.json({ message: "Received successfully" });
+		let expense = parseExpense(input);
+		if (expense.amount) {
+			expense.category = categorizeExpense(expense.description);
+			console.log("Parsed expense:", expense);
+			await appendSheet(expense);
+			res.json({ message: `Logged ${expense.amount} for ${expense.category}` });
+		} else {
+			res.status(400).json({ error: "Could not parse amount from input" });
+		}
 	} catch (err) {
 		console.error(err);
 		res.status(500).json({ error: "Something went wrong" });
@@ -38,7 +42,7 @@ app.listen(3000, () => {
 
 function parseExpense(text) {
 	const match = text.match(/\d+/);
-	const amount = match ? Number(match[0]) : 0;
+	const amount = match ? Number(match[0]) : null;
 	const description = text
 		.replace(/^.*?\d+\s*/, "")
 		.trim()
@@ -56,16 +60,15 @@ function categorizeExpense(text) {
 	return "Misc";
 }
 
-// async function testWrite(amount, category, description) {
-//  const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-//  await sheets.spreadsheets.values.append({
-//    spreadsheetId,
-//    range: "Sheet1!A:D",
-//    valueInputOption: "USER_ENTERED",
-//    requestBody: {
-//      values: [[new Date().toISOString(), amount, category, description]],
-//    },
-//  });
-
-//  console.log("✅ Successfully wrote to Google Sheet");
-// }
+async function appendSheet({ amount, category, description }) {
+	const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+	await sheets.spreadsheets.values.append({
+		spreadsheetId,
+		range: "Sheet1!A:D",
+		valueInputOption: "USER_ENTERED",
+		requestBody: {
+			values: [[new Date().toISOString(), amount, category, description]],
+		},
+	});
+	console.log("✅ Successfully wrote to Google Sheet");
+}
