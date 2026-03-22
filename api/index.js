@@ -1,7 +1,7 @@
 // import "dotenv/config";
-import { google } from "googleapis";
 // import fs from "fs";
 // import express from "express";
+import { google } from "googleapis";
 import { GoogleGenAI } from "@google/genai";
 import { Resend } from "resend";
 
@@ -68,10 +68,6 @@ const ai = new GoogleGenAI({
 	apiKey: process.env.GEMINI_API_KEY,
 });
 
-// const serviceAccount = JSON.parse(
-// 	fs.readFileSync("./service-account.json", "utf-8"),
-// );
-
 const serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
 
 const auth = new google.auth.GoogleAuth({
@@ -82,30 +78,6 @@ const auth = new google.auth.GoogleAuth({
 const sheets = google.sheets({ version: "v4", auth });
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-
-export default async function handler(req, res) {
-	if (req.method !== "POST") {
-		return res.status(405).json({ message: "Method not allowed" });
-	}
-
-	try {
-		const { text } = req.body;
-
-		if (!text) {
-			return res.status(400).json({ message: "Missing text input" });
-		}
-
-		console.log("Incoming:", text);
-
-		return res.status(200).json({
-			status: "ok",
-			message: `Received: ${text}`,
-		});
-	} catch (err) {
-		console.error(err);
-		return res.status(500).json({ message: "Server error" });
-	}
-}
 
 // const app = express();
 // app.use(express.json());
@@ -156,7 +128,54 @@ export default async function handler(req, res) {
 // 	console.log("Server running on port 3000");
 // });
 
-// export default app;
+export default async function handler(req, res) {
+	if (req.method !== "POST") {
+		return res
+			.status(405)
+			.json({ message: "Only POST methods are allowed. Please try again." });
+	}
+	try {
+		const input = req.body?.text?.toLowerCase();
+		if (!input)
+			return res
+				.status(400)
+				.json({ message: "There was no input provided. Please try again." });
+		console.log("Received from Soumya:", input);
+		let expense = parseInput(input);
+		if (expense.type && expense.amount) {
+			let category = await categorizeExpense(expense.description);
+			expense.category = category.category;
+			expense.subcategory = category.subcategory;
+			console.log("Parsed input:", expense);
+			if (expense.type === "log") {
+				await appendSheet(expense);
+				const totals = await getStructuredTotals();
+				const taunt = await generateTaunt(expense, totals);
+				console.log("Generated taunt:", taunt);
+				return res.status(200).json({
+					status: `Logged ${expense.amount} for ${expense.subcategory} under ${expense.category}`,
+					message: taunt,
+				});
+			} else if (expense.type === "query") {
+				const totals = await getStructuredTotals();
+				const decision = await approveExpense(input, expense, totals);
+				console.log("Generated decision:", decision);
+				return res.status(200).json({
+					status: `Asked for approval to spend ${expense.amount} on ${expense.subcategory} under ${expense.category}`,
+					message: decision,
+				});
+			}
+		}
+		return res.status(400).json({
+			message: "I could not parse the input. Please try again.",
+		});
+	} catch (err) {
+		console.error(err);
+		return res.status(500).json({
+			message: "Something went wrong. Please try again.",
+		});
+	}
+}
 
 function parseInput(text) {
 	const match = text.match(/\d+/);
