@@ -7,7 +7,7 @@ import { Resend } from "resend";
 
 const TAXONOMY = `
   House:
-  - Rent + Repair
+  - Rent & Repair
   - Furniture 
   - Appliances (washing machine, microwave, blender, etc)
   - Electricity
@@ -95,9 +95,10 @@ app.post("/log", async (req, res) => {
 			expense.subcategory = category.subcategory;
 			console.log("Parsed expense:", expense);
 			await appendSheet(expense);
-			const taunt = await generateTaunt(expense);
+			const totals = await getStructuredTotals();
+			const taunt = await generateTaunt(expense, totals);
 			console.log("Generated taunt:", taunt);
-			await sendEmail(input, taunt);
+			// await sendEmail(input, taunt);
 			res.json({
 				message: `Logged ${expense.amount} for ${expense.subcategory} under ${expense.category}`,
 				taunt: taunt,
@@ -172,20 +173,67 @@ async function categorizeExpense(text) {
 
 async function appendSheet({ amount, subcategory, category, description }) {
 	const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+	const date = new Date();
+	const formattedDate = date.toLocaleDateString("en-US", {
+		day: "numeric",
+		month: "long",
+		year: "numeric",
+	});
 	await sheets.spreadsheets.values.append({
 		spreadsheetId,
-		range: "Sheet1!A:D",
+		range: "Data!A:E",
 		valueInputOption: "USER_ENTERED",
 		requestBody: {
-			values: [
-				[new Date().toISOString(), amount, subcategory, category, description],
-			],
+			values: [[formattedDate, amount, subcategory, category, description]],
 		},
 	});
 	console.log("✅ Successfully wrote to Google Sheet");
 }
 
-async function generateTaunt({ amount, category, description }) {
+async function getStructuredTotals() {
+	const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+	const response = await sheets.spreadsheets.values.get({
+		spreadsheetId,
+		range: "Totals!A:D",
+	});
+	const rows = response.data.values;
+	const COLLECTIVE_TOTALS = {};
+	const CATEGORY_TOTALS = {};
+	const SUBCATEGORY_TOTALS = {};
+	if (!rows || rows.length === 0) {
+		return { COLLECTIVE_TOTALS, CATEGORY_TOTALS, SUBCATEGORY_TOTALS };
+	}
+	for (const row of rows) {
+		const [total, label, type, category] = row;
+		if (!total || !label || !type) continue;
+		const numericTotal = Number(total);
+		const normalizedLabel = label.toLowerCase().trim();
+		const normalizedType = type.toLowerCase().trim();
+		const normalizedCategory =
+			category && category !== "null" ? category.toLowerCase().trim() : null;
+		if (normalizedType === "collective")
+			COLLECTIVE_TOTALS[normalizedLabel] = numericTotal;
+		else if (normalizedType === "category")
+			CATEGORY_TOTALS[normalizedLabel] = numericTotal;
+		else if (normalizedType === "subcategory") {
+			if (!normalizedCategory) continue;
+			if (!SUBCATEGORY_TOTALS[normalizedCategory]) {
+				SUBCATEGORY_TOTALS[normalizedCategory] = {};
+			}
+			SUBCATEGORY_TOTALS[normalizedCategory][normalizedLabel] = numericTotal;
+		}
+	}
+	return {
+		COLLECTIVE_TOTALS,
+		CATEGORY_TOTALS,
+		SUBCATEGORY_TOTALS,
+	};
+}
+
+async function generateTaunt(
+	{ amount, category, subcategory, description },
+	{ COLLECTIVE_TOTALS, CATEGORY_TOTALS, SUBCATEGORY_TOTALS },
+) {
 	const prompt = `
     You are a sharp, sarcastic financial advisor.
     Write a SHORT (1-2 sentences max) passive-aggressive remark about the user's spending.
@@ -198,6 +246,14 @@ async function generateTaunt({ amount, category, description }) {
 
     User spent ₹${amount} on ${category}.
     Description: "${description}"
+
+    SPENDING CONTEXT (after accounting for this expense):
+    - Monthly total: ₹${COLLECTIVE_TOTALS.monthly || 0}
+    - Weekly total: ₹${COLLECTIVE_TOTALS.weekly || 0}
+    - ${category} total: ₹${CATEGORY_TOTALS[category.toLowerCase()] || 0}
+    - ${subcategory} total: ₹${SUBCATEGORY_TOTALS[category?.toLowerCase()]?.[subcategory.toLowerCase()] || 0}
+
+    Use the context to make the insult personal and observant.
 
     Respond with only the remark. No explanations.
     `;
