@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { google } from "googleapis";
-import fs from "fs";
+// import fs from "fs";
 import express from "express";
 import { GoogleGenAI } from "@google/genai";
 import { Resend } from "resend";
@@ -68,9 +68,11 @@ const ai = new GoogleGenAI({
 	apiKey: process.env.GEMINI_API_KEY,
 });
 
-const serviceAccount = JSON.parse(
-	fs.readFileSync("./service-account.json", "utf-8"),
-);
+// const serviceAccount = JSON.parse(
+// 	fs.readFileSync("./service-account.json", "utf-8"),
+// );
+
+const serviceAccount = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT);
 
 const auth = new google.auth.GoogleAuth({
 	credentials: serviceAccount,
@@ -126,9 +128,11 @@ app.post("/speak", async (req, res) => {
 	}
 });
 
-app.listen(3000, () => {
-	console.log("Server running on port 3000");
-});
+// app.listen(3000, () => {
+// 	console.log("Server running on port 3000");
+// });
+
+export default app;
 
 function parseInput(text) {
 	const match = text.match(/\d+/);
