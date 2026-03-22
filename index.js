@@ -104,10 +104,12 @@ app.post("/speak", async (req, res) => {
 					message: taunt,
 				});
 			} else if (expense.type === "query") {
+				const totals = await getStructuredTotals();
+				const decision = await approveExpense(input, expense, totals);
+				console.log("Generated decision:", decision);
 				res.json({
-					status: "Tested the query endpoint successfully",
-					message:
-						"You've correctly reached the approval endpoint, but approval functionality is not implemented yet.",
+					status: `Asked for approval to spend ${expense.amount} on ${expense.subcategory} under ${expense.category}`,
+					message: decision,
 				});
 			}
 			// await sendEmail(input, taunt);
@@ -147,7 +149,7 @@ function parseInput(text) {
 
 async function categorizeExpense(text) {
 	let prompt = `
-  You are categorizing a user's expense into EXACTLY one Category and one Subcategory.
+  You are categorizing a user's expense(₹) into EXACTLY one Category and one Subcategory.
 
   Follow these rules STRICTLY:
   - Always pick the MOST specific match
@@ -272,6 +274,40 @@ async function generateTaunt(
     Use the context to make the insult personal and observant.
 
     Respond with only the remark. No explanations.
+    `;
+	const response = await ai.models.generateContent({
+		model: "gemini-2.5-flash",
+		contents: [{ role: "user", parts: [{ text: prompt }] }],
+	});
+	return response.text;
+}
+
+async function approveExpense(
+	input,
+	{ category, subcategory },
+	{ COLLECTIVE_TOTALS, CATEGORY_TOTALS, SUBCATEGORY_TOTALS },
+) {
+	const prompt = `
+    You are a sharp, sarcastic financial advisor.
+    The user is ASKING PERMISSION to spend money(₹).
+
+    Be:
+    - judgmental
+    - slightly condescending
+    - decisive (yes/no energy)
+    - short (1–2 lines)
+
+    User asks: "${input}"
+
+    SPENDING CONTEXT:
+    - Monthly total: ₹${COLLECTIVE_TOTALS.monthly || 0}
+    - Weekly total: ₹${COLLECTIVE_TOTALS.weekly || 0}
+    - ${category} total: ₹${CATEGORY_TOTALS[category.toLowerCase()] || 0}
+    - ${subcategory} total: ₹${SUBCATEGORY_TOTALS[category?.toLowerCase()]?.[subcategory.toLowerCase()] || 0}
+
+    Use the context to make the insult personal and observant.
+
+    Respond with only the remark.
     `;
 	const response = await ai.models.generateContent({
 		model: "gemini-2.5-flash",
