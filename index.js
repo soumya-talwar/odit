@@ -84,31 +84,43 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const app = express();
 app.use(express.json());
 
-app.post("/log", async (req, res) => {
+app.post("/speak", async (req, res) => {
 	try {
-		const input = req.body.text;
+		const input = req.body.text.toLowerCase();
 		console.log("Received from Siri:", input);
-		let expense = parseExpense(input);
-		if (expense.amount) {
+		let expense = parseInput(input);
+		if (expense.type && expense.amount) {
 			let category = await categorizeExpense(expense.description);
 			expense.category = category.category;
 			expense.subcategory = category.subcategory;
-			console.log("Parsed expense:", expense);
-			await appendSheet(expense);
-			const totals = await getStructuredTotals();
-			const taunt = await generateTaunt(expense, totals);
-			console.log("Generated taunt:", taunt);
+			console.log("Parsed input:", expense);
+			if (expense.type === "log") {
+				await appendSheet(expense);
+				const totals = await getStructuredTotals();
+				const taunt = await generateTaunt(expense, totals);
+				console.log("Generated taunt:", taunt);
+				res.json({
+					status: `Logged ${expense.amount} for ${expense.subcategory} under ${expense.category}`,
+					message: taunt,
+				});
+			} else if (expense.type === "query") {
+				res.json({
+					status: "Tested the query endpoint successfully",
+					message:
+						"You've correctly reached the approval endpoint, but approval functionality is not implemented yet.",
+				});
+			}
 			// await sendEmail(input, taunt);
-			res.json({
-				message: `Logged ${expense.amount} for ${expense.subcategory} under ${expense.category}`,
-				taunt: taunt,
-			});
 		} else {
-			res.status(400).json({ error: "Could not parse amount from input" });
+			res
+				.status(400)
+				.json({ message: "I could not parse the input. Please try again." });
 		}
 	} catch (err) {
 		console.error(err);
-		res.status(500).json({ error: "Something went wrong" });
+		res
+			.status(500)
+			.json({ message: "Something went wrong. Please try again." });
 	}
 });
 
@@ -116,9 +128,12 @@ app.listen(3000, () => {
 	console.log("Server running on port 3000");
 });
 
-function parseExpense(text) {
+function parseInput(text) {
 	const match = text.match(/\d+/);
 	const amount = match ? Number(match[0]) : null;
+	let type = undefined;
+	if (text.includes("i spent")) type = "log";
+	else if (text.includes("should i spend")) type = "query";
 	const description = text
 		.replace(/^.*?\d+\s*/, "")
 		.trim()
@@ -126,6 +141,7 @@ function parseExpense(text) {
 	return {
 		amount,
 		description,
+		type,
 	};
 }
 
