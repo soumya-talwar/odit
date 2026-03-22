@@ -5,6 +5,65 @@ import express from "express";
 import { GoogleGenAI } from "@google/genai";
 import { Resend } from "resend";
 
+const TAXONOMY = `
+  House:
+  - Rent + Repair
+  - Furniture 
+  - Appliances (washing machine, microwave, blender, etc)
+  - Electricity
+  - Gas
+  - Wifi
+  - Plants
+  - Bedding & Furnishings (blanket, towel, curtain, rug, etc)
+  - Home Essentials (cleaning, toiletries, maintenance items)
+  - Domestic Help
+  - Misc (uncategorized house expenses)
+
+  Food:
+  - Meal Subscriptions (plan cost, delivery charges)
+  - Fruits 
+  - Snacks
+  - Food Delivery
+  - Dining Out
+  - Misc (uncategorized food expenses)
+
+  Hobbies:
+  - Coding (hardware/robotics equipment, ai/software subscriptions, etc)
+  - Dance (classes, socials)
+  - Ninjutsu
+  - Table Tennis
+  - Jigsaw Puzzles
+  - Skating
+  - Fitness
+  - Misc (weekend activities, events, experiences, etc)
+
+  Transport:
+  - Car (purchase, repair)
+  - Petrol
+  - Cabs
+  - Car Cleaner
+  - Parking & Tolls
+  - Misc (uncategorized transport expenses)
+
+  Shopping:
+  - Clothing & Accessories
+  - Personal Care (cosmetics, skincare, salon, grooming, etc)
+  - Health
+  - Electronics
+  - Kitchen (utensils, containers, bottles, etc)
+  - Blinkit (all Blinkit purchases)
+  - Gifts
+  - Misc (uncategorized shopping expenses)
+
+  Vacation (all expenses incurred during travel/trip, categorized separately from regular expenses):
+  - Travel
+  - Stay
+  - Food
+  - Misc
+
+  Misc (fallback category for uncategorized expenses)
+`;
+
 const ai = new GoogleGenAI({
 	apiKey: process.env.GEMINI_API_KEY,
 });
@@ -31,14 +90,16 @@ app.post("/log", async (req, res) => {
 		console.log("Received from Siri:", input);
 		let expense = parseExpense(input);
 		if (expense.amount) {
-			expense.category = categorizeExpense(expense.description);
+			let category = await categorizeExpense(expense.description);
+			expense.category = category.category;
+			expense.subcategory = category.subcategory;
 			console.log("Parsed expense:", expense);
 			await appendSheet(expense);
 			const taunt = await generateTaunt(expense);
 			console.log("Generated taunt:", taunt);
 			await sendEmail(input, taunt);
 			res.json({
-				message: `Logged ${expense.amount} for ${expense.category}`,
+				message: `Logged ${expense.amount} for ${expense.subcategory} under ${expense.category}`,
 				taunt: taunt,
 			});
 		} else {
@@ -67,22 +128,58 @@ function parseExpense(text) {
 	};
 }
 
-function categorizeExpense(text) {
-	if (text.includes("uber") || text.includes("ola")) return "Transport";
-	if (text.includes("swiggy") || text.includes("zomato")) return "Food";
-	if (text.includes("dance") || text.includes("jive")) return "Hobbies";
-	if (text.includes("amazon")) return "Shopping";
-	return "Misc";
+async function categorizeExpense(text) {
+	let prompt = `
+  You are categorizing a user's expense into EXACTLY one Category and one Subcategory.
+
+  Follow these rules STRICTLY:
+  - Always pick the MOST specific match
+  - Do NOT guess beyond the given taxonomy
+  - Use "Misc" only if nothing else fits
+  - Return ONLY a valid JSON object in this exact format:
+    {
+      "category": "<Category>",
+      "subcategory": "<Subcategory>"
+    }
+  - Use only the subcategory NAME (no brackets, no descriptions)
+
+  TAXONOMY: ${TAXONOMY}
+  
+  User's expense description: "${text}"`;
+
+	const response = await ai.models.generateContent({
+		model: "gemini-2.5-flash",
+		contents: [{ role: "user", parts: [{ text: prompt }] }],
+	});
+	let raw = response.text
+		.replace(/```json/g, "")
+		.replace(/```/g, "")
+		.trim();
+	try {
+		const parsed = JSON.parse(raw);
+		return {
+			category: parsed.category,
+			subcategory: parsed.subcategory,
+		};
+	} catch (err) {
+		console.error("Parsing failed:", raw);
+		return {
+			category: "Misc",
+			subcategory: "Misc",
+		};
+	}
 }
 
-async function appendSheet({ amount, category, description }) {
+async function appendSheet({ amount, subcategory, category, description }) {
 	const spreadsheetId = process.env.GOOGLE_SHEET_ID;
 	await sheets.spreadsheets.values.append({
 		spreadsheetId,
 		range: "Sheet1!A:D",
 		valueInputOption: "USER_ENTERED",
 		requestBody: {
-			values: [[new Date().toISOString(), amount, category, description]],
+			values: [
+				[new Date().toISOString(), amount, subcategory, category, description],
+			],
 		},
 	});
 	console.log("✅ Successfully wrote to Google Sheet");
