@@ -360,12 +360,12 @@ async function generateSummary({
 }) {
 	const prompt = `
 		You are a sharp, sarcastic financial advisor.
-		Write a structured weekly summary of the user’s spending.
+		Write a SHORT structured weekly summary of the user’s spending.
 
 		TONE:
 		- slightly mean, judgmental
 		- observant and specific
-		- concise (1–2 lines per section)
+		- concise (1-2 lines per section)
 		- not poetic, not verbose
 
 		DATA:
@@ -379,32 +379,34 @@ async function generateSummary({
 		- Identify ONE clear behavioral pattern or observation
 		- Give ONE decisive verdict (are they in control or not?)
 		- Give ONE actionable piece of advice
-
-		FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
-
-		OBSERVATION:
-		<your observation>
-
-		VERDICT:
-		<your verdict>
-
-		ADVICE:
-		<your advice>
-
-		Do not add anything else.
+		- Return ONLY a valid JSON object in this exact format:
+    {
+      "observation": "<Observation>",
+      "verdict": "<Verdict>",
+			"advice": "<Advice>"
+    }
 		`;
 
 	const response = await ai.models.generateContent({
 		model: "gemini-2.5-flash",
 		contents: [{ role: "user", parts: [{ text: prompt }] }],
 	});
-	const formattedSummary = response.text.replace(/\n/g, "<br>");
-	return formattedSummary;
+
+	let raw = response.text
+		.replace(/```json/g, "")
+		.replace(/```/g, "")
+		.trim();
+	const parsed = JSON.parse(raw);
+	return {
+		observation: parsed.observation,
+		verdict: parsed.verdict,
+		advice: parsed.advice,
+	};
 }
 
 async function sendSummaryEmail(
 	{ monthTotal, weekTotal, topCategory, topSubcategory, wowChange },
-	summary,
+	{ observation, verdict, advice },
 ) {
 	try {
 		await resend.emails.send({
@@ -414,13 +416,21 @@ async function sendSummaryEmail(
 			html: `
 			<p>This week:</p>
 
-			<p><strong>Total Monthly Spend:</strong> ₹${monthTotal}</p>
-			<p><strong>Total Weekly Spend:</strong> ₹${weekTotal}</p>
-			<p><strong>Week on Week Change:</strong> ${wowChange}%</p>
-			<p><strong>Highest Spending Category:</strong> ${topCategory}</p>
-			<p><strong>Highest Spending Subcategory:</strong> ${topSubcategory}</p>
+			<ol>
+				<li>Total Monthly Spend: ₹${monthTotal}</li>
+				<li>Total Weekly Spend: ₹${weekTotal}</li>
+				<li>Week on Week Change: ${wowChange}%</li>
+				<li>Highest Spending Category: ${topCategory}</li>
+				<li>Highest Spending Subcategory: ${topSubcategory}</li>
+			</ol>
+			<p>OBSERVATION:</p>
+			<p>${observation}</p>
+			<p>VERDICT:</p>
+			<p>${verdict}</p>
+			<p>ADVICE:</p>
+			<p>${advice}</p>
 
-			<p>${summary}</p>
+			ಠ_ಠ
 		`,
 		});
 	} catch (err) {
