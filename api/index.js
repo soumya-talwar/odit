@@ -398,8 +398,8 @@ async function generateSummary({
 		model: "gemini-2.5-flash",
 		contents: [{ role: "user", parts: [{ text: prompt }] }],
 	});
-
-	return response.text;
+	const formattedSummary = response.text.replace(/\n/g, "<br>");
+	return formattedSummary;
 }
 
 async function sendSummaryEmail(
