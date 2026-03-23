@@ -332,9 +332,9 @@ async function approveExpense(
 
 async function getSummaryMetrics() {
 	const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-	const response = await sheets.spreadsheets.values.get({
+	const response = await sheets.spreadsheets.values.batchGet({
 		spreadsheetId,
-		range: "Totals!A3:A4,Totals!K10:K11,Dashboard!D11",
+		ranges: ["Totals!A3:A4", "Totals!K10:K11", "Dashboard!D11"],
 	});
 	const ranges = response.data.valueRanges;
 	const monthTotal = Number(ranges[0]?.values?.[0]?.[0] || 0);
