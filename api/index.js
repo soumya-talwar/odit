@@ -92,7 +92,9 @@ export default async function handler(req, res) {
 		let expense = parseInput(input);
 		if (expense.type) {
 			if (expense.type === "summary") {
-				sendEmail();
+				const metrics = await getSummaryMetrics();
+				const summary = await generateSummary(metrics);
+				await sendSummaryEmail(metrics, summary);
 				return res.status(200).json({
 					status: "Summary email sent successfully",
 					message: "Check your inbox for the summary email.",
@@ -328,17 +330,100 @@ async function approveExpense(
 	return response.text;
 }
 
-async function sendEmail() {
+async function getSummaryMetrics() {
+	const spreadsheetId = process.env.GOOGLE_SHEET_ID;
+	const response = await sheets.spreadsheets.values.get({
+		spreadsheetId,
+		range: "Totals!A3:A4,Totals!K10:K11,Dashboard!D11",
+	});
+	const ranges = response.data.valueRanges;
+	const monthTotal = Number(ranges[0]?.values?.[0]?.[0] || 0);
+	const weekTotal = Number(ranges[0]?.values?.[1]?.[0] || 0);
+	const topCategory = ranges[1]?.values?.[0]?.[0] || "None";
+	const topSubcategory = ranges[1]?.values?.[1]?.[0] || "None";
+	const wowChange = Number(ranges[2]?.values?.[0]?.[0] || 0);
+	return {
+		monthTotal,
+		weekTotal,
+		topCategory,
+		topSubcategory,
+		wowChange,
+	};
+}
+
+async function generateSummary({
+	monthTotal,
+	weekTotal,
+	topCategory,
+	topSubcategory,
+	wowChange,
+}) {
+	const prompt = `
+		You are a sharp, sarcastic financial advisor.
+		Write a structured weekly summary of the user’s spending.
+
+		TONE:
+		- slightly mean, judgmental
+		- observant and specific
+		- concise (1–2 lines per section)
+		- not poetic, not verbose
+
+		DATA:
+		- Monthly spend: ₹${monthTotal}
+		- Weekly spend: ₹${weekTotal}
+		- Week-on-week change: ${wowChange}%
+		- Highest spend category: ${topCategory}
+		- Highest spend subcategory: ${topSubcategory}
+
+		INSTRUCTIONS:
+		- Identify ONE clear behavioral pattern or observation
+		- Give ONE decisive verdict (are they in control or not?)
+		- Give ONE actionable piece of advice
+
+		FORMAT YOUR RESPONSE EXACTLY LIKE THIS:
+
+		OBSERVATION:
+		<your observation>
+
+		VERDICT:
+		<your verdict>
+
+		ADVICE:
+		<your advice>
+
+		Do not add anything else.
+		`;
+
+	const response = await ai.models.generateContent({
+		model: "gemini-2.5-flash",
+		contents: [{ role: "user", parts: [{ text: prompt }] }],
+	});
+
+	return response.text;
+}
+
+async function sendSummaryEmail(
+	{ monthTotal, weekTotal, topCategory, topSubcategory, wowChange },
+	summary,
+) {
 	try {
 		await resend.emails.send({
-			from: "onboarding@resend.dev",
+			from: "Odit <onboarding@resend.dev>",
 			to: process.env.EMAIL_USER,
-			subject: "[ODIT] Regarding your expense",
+			subject: "[ODIT] Your weekly spending summary",
 			html: `
-        <p>TESTING</p>
-      `,
+			<p>This week:</p>
+
+			<p><strong>Total Monthly Spend:</strong> ₹${monthTotal}</p>
+			<p><strong>Total Weekly Spend:</strong> ₹${weekTotal}</p>
+			<p><strong>Week on Week Change:</strong> ${wowChange}%</p>
+			<p><strong>Highest Spending Category:</strong> ${topCategory}</p>
+			<p><strong>Highest Spending Subcategory:</strong> ${topSubcategory}</p>
+
+			<p>${summary}</p>
+		`,
 		});
 	} catch (err) {
-		console.error("Email failed:", err);
+		console.log("Email failed:", err.message, err);
 	}
 }
