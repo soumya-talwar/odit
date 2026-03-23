@@ -1,6 +1,3 @@
-// import "dotenv/config";
-// import fs from "fs";
-// import express from "express";
 import { google } from "googleapis";
 import { GoogleGenAI } from "@google/genai";
 import { Resend } from "resend";
@@ -79,55 +76,6 @@ const sheets = google.sheets({ version: "v4", auth });
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// const app = express();
-// app.use(express.json());
-
-// app.post("/speak", async (req, res) => {
-// 	try {
-// 		const input = req.body.text.toLowerCase();
-// 		console.log("Received from Siri:", input);
-// 		let expense = parseInput(input);
-// 		if (expense.type && expense.amount) {
-// 			let category = await categorizeExpense(expense.description);
-// 			expense.category = category.category;
-// 			expense.subcategory = category.subcategory;
-// 			console.log("Parsed input:", expense);
-// 			if (expense.type === "log") {
-// 				await appendSheet(expense);
-// 				const totals = await getStructuredTotals();
-// 				const taunt = await generateTaunt(expense, totals);
-// 				console.log("Generated taunt:", taunt);
-// 				res.json({
-// 					status: `Logged ${expense.amount} for ${expense.subcategory} under ${expense.category}`,
-// 					message: taunt,
-// 				});
-// 			} else if (expense.type === "query") {
-// 				const totals = await getStructuredTotals();
-// 				const decision = await approveExpense(input, expense, totals);
-// 				console.log("Generated decision:", decision);
-// 				res.json({
-// 					status: `Asked for approval to spend ${expense.amount} on ${expense.subcategory} under ${expense.category}`,
-// 					message: decision,
-// 				});
-// 			}
-// 			// await sendEmail(input, taunt);
-// 		} else {
-// 			res
-// 				.status(400)
-// 				.json({ message: "I could not parse the input. Please try again." });
-// 		}
-// 	} catch (err) {
-// 		console.error(err);
-// 		res
-// 			.status(500)
-// 			.json({ message: "Something went wrong. Please try again." });
-// 	}
-// });
-
-// app.listen(3000, () => {
-// 	console.log("Server running on port 3000");
-// });
-
 export default async function handler(req, res) {
 	if (req.method !== "POST") {
 		return res
@@ -142,33 +90,48 @@ export default async function handler(req, res) {
 				.json({ message: "There was no input provided. Please try again." });
 		console.log("Received from Soumya:", input);
 		let expense = parseInput(input);
-		if (expense.type && expense.amount) {
-			let category = await categorizeExpense(expense.description);
-			expense.category = category.category;
-			expense.subcategory = category.subcategory;
-			console.log("Parsed input:", expense);
-			if (expense.type === "log") {
-				await appendSheet(expense);
-				const totals = await getStructuredTotals();
-				const taunt = await generateTaunt(expense, totals);
-				console.log("Generated taunt:", taunt);
+		if (expense.type) {
+			if (expense.type === "summary") {
+				sendEmail();
 				return res.status(200).json({
-					status: `Logged ${expense.amount} for ${expense.subcategory} under ${expense.category}`,
-					message: taunt,
+					status: "Summary email sent successfully",
+					message: "Check your inbox for the summary email.",
 				});
-			} else if (expense.type === "query") {
-				const totals = await getStructuredTotals();
-				const decision = await approveExpense(input, expense, totals);
-				console.log("Generated decision:", decision);
-				return res.status(200).json({
-					status: `Asked for approval to spend ${expense.amount} on ${expense.subcategory} under ${expense.category}`,
-					message: decision,
-				});
+			} else {
+				if (expense.amount) {
+					let category = await categorizeExpense(expense.description);
+					expense.category = category.category;
+					expense.subcategory = category.subcategory;
+					console.log("Parsed input:", expense);
+					if (expense.type === "log") {
+						await appendSheet(expense);
+						const totals = await getStructuredTotals();
+						const taunt = await generateTaunt(expense, totals);
+						console.log("Generated taunt:", taunt);
+						return res.status(200).json({
+							status: `Logged ${expense.amount} for ${expense.subcategory} under ${expense.category}`,
+							message: taunt,
+						});
+					} else if (expense.type === "query") {
+						const totals = await getStructuredTotals();
+						const decision = await approveExpense(input, expense, totals);
+						console.log("Generated decision:", decision);
+						return res.status(200).json({
+							status: `Asked for approval to spend ${expense.amount} on ${expense.subcategory} under ${expense.category}`,
+							message: decision,
+						});
+					}
+				} else {
+					return res.status(400).json({
+						message: "I could not parse the input. Please try again.",
+					});
+				}
 			}
+		} else {
+			return res
+				.status(400)
+				.json({ message: "I could not parse the input. Please try again." });
 		}
-		return res.status(400).json({
-			message: "I could not parse the input. Please try again.",
-		});
 	} catch (err) {
 		console.error(err);
 		return res.status(500).json({
@@ -184,6 +147,7 @@ function parseInput(text) {
 	let type = undefined;
 	if (text.includes("i spent")) type = "log";
 	else if (text.includes("should i spend")) type = "query";
+	else if (text.includes("send me a summary")) type = "summary";
 	const description = text
 		.replace(/^.*?\d+\s*/, "")
 		.trim()
@@ -364,15 +328,14 @@ async function approveExpense(
 	return response.text;
 }
 
-async function sendEmail(input, taunt) {
+async function sendEmail() {
 	try {
 		await resend.emails.send({
 			from: "onboarding@resend.dev",
 			to: process.env.EMAIL_USER,
 			subject: "[ODIT] Regarding your expense",
 			html: `
-        <p><i>"${input}"</i></p>
-        <p>${taunt}</p>
+        <p>TESTING</p>
       `,
 		});
 	} catch (err) {
