@@ -79,7 +79,7 @@ The report is based on the week's spending metrics pulled from **Google Sheets**
 
 ## Examples
 
-### Input
+**Input:**
 
 > “I spent ₹350 on food delivery.”
 
@@ -87,7 +87,7 @@ The report is based on the week's spending metrics pulled from **Google Sheets**
 
 > “Another ₹350 on food delivery? Looks like the kitchen is just for decoration.”
 
-### Input
+**Input:**
 
 > “Should I spend ₹5000 on a jigsaw puzzle?”
 
