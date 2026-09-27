@@ -1,107 +1,105 @@
-# ODIT — AI Financial Advisor 
+# ODIT
 
-Odit is a voice-first, AI-powered personal finance system that logs expenses, evaluates spending decisions, and sends sarcastic weekly summaries — all powered by Google Sheets + Gemini.
+### An expense tracker that insults me when I spend money
 
-It is designed to feel less like a tool and more like a judgmental financial advisor that lives in your pocket.
+Odit is a personal expense tracker that I can use to **log expenses, ask for purchase approvals based on my spend history, and receive weekly reports on mail**. It keeps a record of my financial decisions and insults them.
 
-<br>
+## How it works
 
-## ✨ Features
+```text
+               ┌──────────────────┐
+               │  Natural input:  │
+               │  "I spent ₹300   │
+               │   on an Uber"    │
+               └────────┬─────────┘
+                        │
+                        ▼
+                 Apple Shortcut
+                        │
+                        ▼
+                      Odit
+                        │
+                        ▼
+                  Parse intent
+                        │
+             ┌──────────┴──────────┐
+             ▼                     ▼
+       Log / Approve             Report
+             │                     │
+             ▼                     ▼
+     Categorise expense    Fetch spend history
+          (Gemini)           (Google Sheets)
+             │                     │
+             ▼                     ▼
+ Log / Fetch spend history   Generate report
+      (Google Sheets)           (Gemini)
+             │                     │
+             ▼
+       Generate insult        Email report
+          (Gemini)              (Resend)
+             │
+             ▼
+       Apple Shortcut
+             │
+             ▼
+      Spoken out loud
+```
 
-### 🗣 Voice-based Expense Logging
-Log expenses using natural language:
-> "I spent 500 on dinner"
+I can say **“I spent ₹300 on an Uber”** or **“Should I spend ₹5000 on a jigsaw puzzle?”** to an Apple Shortcut, which captures my speech and sends the transcribed text to Odit.
 
-- Extracts amount + description
-- Categorizes using AI (Gemini)
-- Logs to Google Sheets
+Odit's logic parses the request to extract the **amount** and **description**, and understand the **intent** of the request — whether it is logging an expense, asking for approval on a purchase, or requesting a report.
 
+### Log an expense
 
-### 🧠 Smart Categorization
-Uses a predefined taxonomy to classify expenses into:
-- Category (e.g. Food, Transport)
-- Subcategory (e.g. Dining Out, Cabs)
+For expense logging, Odit uses **Gemini's API** to categorise the purchase based on a predefined taxonomy of categories and subcategories. The expense is then logged to **Google Sheets**, which stores the raw data and calculates spending totals.
 
-Fallback: `Misc` if no match is found
+Google Sheets also acts as a dashboard where I can see **charts and derived insights about my spending**, including weekly and monthly spend, category breakdowns, impulse spending, essential vs. non-essential spending, and spending trends and forecasts.
 
+When generating an insult, Odit fetches the **weekly, monthly, category and subcategory totals** from Google Sheets and uses them as context when prompting Gemini again.
 
-### 😈 AI-Generated Taunts
-Every expense triggers a **personalized, sarcastic remark** based on:
-- Current monthly spend
-- Weekly spend
-- Category totals
-- Subcategory trends
+The generated insult is sent back to the Shortcut and spoken out loud.
 
+### Approve expenditure
 
-### 🤔 Spend Approval Mode
-Ask before spending:
-> "Should I spend 2000 on shoes?"
+I can also ask Odit whether I should make a purchase before I spend the money.
 
-Returns a judgmental yes/no style response using:
-- Current spending context
-- Category behavior
+For example:
 
+> **“Should I spend ₹5000 on a jigsaw puzzle?”**
 
-### 📊 Google Sheets Dashboard
-Data is stored and visualized across:
-- Raw logs (`Data` sheet)
-- Computed totals (`Totals` sheet)
-- Visual dashboard (`Dashboard` sheet)
+Odit parses the amount and description, determines which spending category the purchase belongs to, and fetches my existing spending history from **Google Sheets**.
 
-Includes:
-- Monthly / weekly spend
-- Category breakdowns
-- Impulse spending %
-- Essential vs non-essential split
-- Trend charts
+That spending context is then sent to **Gemini**, which makes a judgement based on what I'm proposing to buy and how much I've already been spending.
 
+### Email weekly report
 
-### 📩 Weekly Summary Email
-Trigger:
-> "Send me a summary"
+Odit can also generate a weekly spending report and send it to me by email using **Resend**.
 
-Sends a structured report:
+The report is based on the week's spending metrics pulled from **Google Sheets**, and **Gemini** uses the data to identify patterns in my spending and provide advice.
 
-- Key metrics (weekly, monthly, WoW change)
-- Highest spending category/subcategory
-- AI-generated:
-  - Observation
-  - Verdict
-  - Advice
+## Examples
 
-<br>
+### Input
 
-## 🧱 Tech Stack
+> “I spent ₹350 on food delivery.”
 
-- **Backend:** Node.js (Serverless on Vercel)
-- **AI:** Google Gemini (`@google/genai`)
-- **Database:** Google Sheets
-- **Email:** Resend
-- **Automation:** Apple Shortcuts (voice interface)
+**Odit:**
 
-<br>
+> “Another ₹350 on food delivery? Looks like the kitchen is just for decoration.”
 
-## 🧠 How it Works
+### Input
 
-1. User sends text via Siri Shortcut → `/api`
-2. Input is parsed into:
-   - `amount`
-   - `description`
-   - `intent` (log / query / summary)
-3. Gemini categorizes the expense
-4. Data is written to Google Sheets
-5. Totals are computed via formulas
-6. Context is fetched back into the app
-7. Gemini generates:
-   - Taunt / Decision / Summary
-8. Response is returned (and optionally emailed)
+> “Should I spend ₹5000 on a jigsaw puzzle?”
 
-<br>
+**Odit:**
 
-## 🧩 Example Inputs
+> “No. Fix your spending habits before you try fixing jigsaw puzzles."
 
-| Input | Behavior |
-|------|--------|
-| "I spent 500 on groceries" | Logs expense + taunt |
-| "Should I spend 2000 on shoes?" | Approval response |
-| "Send me a summary" | Sends weekly email |
+## Built with
+
+- **JavaScript / Node.js**
+- **Apple Shortcuts**
+- **Google Gemini API**
+- **Google Sheets API**
+- **Resend**
+- **Vercel**
